@@ -46,4 +46,6 @@ fallback while preserving `/api` JSON errors, health, OpenAPI and Swagger.
 
 Observed remote frontend at `e4908cf`: buildable fixture shell with production
 transport intentionally unconfigured. This is not an integrated live demo yet.
+Its lockfile/install and production build passed in the root Dockerfile, in a
+temporary combined checkout; built HTML, nested navigation and JS assets were served.
 Parrot has not edited any `frontend/` source or its lockfile.

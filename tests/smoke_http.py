@@ -1,8 +1,10 @@
 """Exercise an actual Uvicorn process against pg_virtualenv, without printing credentials."""
+import argparse
 from datetime import UTC, datetime, timedelta
 from http.cookiejar import CookieJar
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -15,9 +17,11 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 def main():
     if not os.getenv("PGHOST"):
         raise SystemExit("Run: pg_virtualenv .venv/bin/python tests/smoke_http.py")
-    image = sys.argv[2] if len(sys.argv) == 3 and sys.argv[1] == "--container" else None
-    if sys.argv[1:] and image is None:
-        raise SystemExit("Usage: smoke_http.py [--container LOCAL_IMAGE]")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--container", help="Run the locally built image instead of the local Python process.")
+    parser.add_argument("--expect-frontend", action="store_true", help="Also check built HTML, nested navigation and a real JavaScript asset.")
+    options = parser.parse_args()
+    image = options.container
     env = dict(os.environ)
     env.pop("DATABASE_URL", None)
     env.pop("RAILWAY_ENVIRONMENT_ID", None)
@@ -80,6 +84,18 @@ def main():
             assert revoked["evidence"] == [] and revoked["decision"]["next_steps"] == []
             assert request("/api/context")[1] == revoked
             assert request("/api/advisor-preview")[1]["context"] == revoked
+            if options.expect_frontend:
+                with browser.open(Request(origin + "/", headers={"Accept": "text/html"}), timeout=5) as response:
+                    html = response.read().decode()
+                    assert response.status == 200 and "<!doctype html" in html.lower()
+                with browser.open(Request(origin + "/advisor", headers={"Accept": "text/html"}), timeout=5) as response:
+                    assert response.read().decode() == html
+                asset = re.search(r'src="(/assets/[^\"]+\.js)"', html)
+                assert asset, "Production HTML has no built JavaScript asset."
+                with browser.open(origin + asset.group(1), timeout=5) as response:
+                    assert response.status == 200 and response.read()
+                assert request("/api/unknown")[0] == 404
+                print("Frontend serving passed: built HTML, nested navigation, JavaScript asset and API JSON boundary.")
             print(f"{'Container' if image else 'Uvicorn'} HTTP smoke passed: ready -> ask -> help -> cancel -> revoke -> persisted customer/advisor equality.")
         finally:
             if image:
