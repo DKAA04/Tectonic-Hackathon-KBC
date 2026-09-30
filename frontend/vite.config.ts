@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(async ({ mode, command, isPreview }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  const env = loadEnv(mode, process.cwd(), "API_PROXY_");
   const fixture = command === "serve" && !isPreview && mode === "fixture";
   const fixtureMiddleware = fixture
     ? (await import("./dev/fixture.ts")).createFixtureMiddleware()
