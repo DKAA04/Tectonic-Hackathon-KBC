@@ -1,0 +1,14 @@
+Rehearsal time: 2026-09-30T19:34:49.233Z
+PASS initial question and two permitted evidence items
+PASS confirm 15 November 2026; address and home-cover preparation returned
+PASS briefing content generation excludes session IDs, CSRF and evidence IDs (browser download not exercised)
+PASS change to 22 November 2026; advisor context and version match
+PASS existing cookie recovers corrected context without new bootstrap (HTTP refresh equivalent)
+PASS 10 November help date suppresses steps; Help me now resumes them
+PASS signal consent removes synthetic signals and preserves explicit intent
+PASS cancellation withdraws obsolete steps in customer and advisor contexts
+PASS advisor consent revocation returns exact 403 ADVISOR_CONSENT_REQUIRED
+PASS personalization revocation hides evidence/help and removes exported preparation
+PASS independent HTTP cookie sessions remain isolated (actual incognito browser pending)
+PASS tentative signal revocation removes the inference
+REHEARSAL COMPLETE: local development fixtures only; no live deployment or visual recording verified.
