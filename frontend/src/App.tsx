@@ -1,667 +1,101 @@
-import { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  CalendarDays,
-  Check,
-  ChevronRight,
-  Home,
-  LockKeyhole,
-  RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  X,
-} from "lucide-react";
-import { fixtureMode } from "@/lib/api";
-import { useMoment } from "@/lib/use-moment";
-import type { Consent, Context } from "@/lib/types";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState } from 'react'
+import { ArrowRight, CalendarDays, Check, ChevronRight, ClipboardList, Home, LockKeyhole, MapPin, MessageSquare, Pencil, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { fixtureMode } from '@/lib/api'
+import { useMoment } from '@/lib/use-moment'
+import { changeLabel, displayDate, displayTime, draftKey, readableMessage, situationLabel } from '@/lib/presentation'
+import type { Consent, Context } from '@/lib/types'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Drawer } from '@/components/drawer'
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
-const statusLabel = (c: Context) =>
-  ({
-    unknown: "No inferred situation",
-    tentative: "Tentative · please confirm",
-    confirmed: "Confirmed by you",
-    cancelled: "Cancelled by you",
-  })[c.situation.status];
+type Moment = ReturnType<typeof useMoment>
+type Panel = 'date' | 'cancel' | 'privacy' | 'evidence' | 'history' | 'reset' | 'moving-admin' | 'moving-insurance' | null
 
-function EvidenceList({ context }: { context: Context }) {
-  const ids = new Set([
-    ...context.situation.evidence_ids,
-    ...context.decision.evidence_ids,
-  ]);
-  const evidence = context.evidence.filter((item) => ids.has(item.id));
-  return (
-    <section aria-labelledby="evidence-title">
-      <div className="eyebrow">Always explainable</div>
-      <h2 id="evidence-title" className="mt-2 text-xl font-semibold">
-        What this is based on
-      </h2>
-      {evidence.length ? (
-        <ul className="mt-5 space-y-5">
-          {evidence.map((item) => (
-            <li
-              key={item.id}
-              className="flex gap-3 border-t border-slate-100 pt-4"
-            >
-              <span className="mt-1 size-2 shrink-0 rounded-full bg-teal-600" />
-              <div>
-                <p className="leading-relaxed">{item.summary}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {item.kind === "customer_correction"
-                    ? "Your correction"
-                    : "Synthetic signal"}{" "}
-                  ·{" "}
-                  {new Intl.DateTimeFormat("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                    timeZone: "UTC",
-                  }).format(new Date(item.occurred_at))}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-4 text-sm leading-relaxed text-slate-500">
-          {context.consent.personalization
-            ? "There is no permitted evidence for this situation."
-            : "Evidence is hidden while personalization is off."}
-        </p>
-      )}
-    </section>
-  );
+function AdvisorSummary({ moment: m, expanded = false }: { moment: Moment; expanded?: boolean }) {
+  const c = m.advisor?.context
+  return <Card className="workspace-card advisor-card">
+    <div className="section-heading"><span className="icon-tile small"><MessageSquare size={19}/></span><div><p className="eyebrow">Same session · read-only</p><h2>Advisor preview</h2></div></div>
+    {!m.fresh ? <p className="muted">Waiting for the current situation.</p> : !m.context?.consent.advisor_preview ? <div className="empty-compact"><LockKeyhole size={22}/><h3>Preview consent is off</h3><p>Manage this in Privacy & consent in the customer view.</p></div> : m.advisorError ? <p role="alert" className="muted">{m.advisorError}</p> : !c ? <p role="status" className="muted">Refreshing the shared situation…</p> : <>
+      <div className="advisor-person"><span className="avatar">A</span><div><h3>{c.customer.display_name}</h3><p className="muted">{situationLabel(c)}</p></div></div>
+      {c.situation.move_date && <p className="detail-line"><CalendarDays size={16}/>{displayDate(c.situation.move_date)}</p>}
+      <div className="summary-section"><p className="eyebrow">What changed</p><p>{c.history.length ? changeLabel(c.history[c.history.length - 1].action) : 'Awaiting Alex’s confirmation'}</p><p className="muted">{readableMessage(c.decision.message)}</p></div>
+      <div className="summary-section"><p className="eyebrow">Active preparation</p>{c.decision.next_steps.length ? <ul className="advisor-steps">{c.decision.next_steps.map(step => <li key={step.id}><Check size={15}/><span>{step.title}</span></li>)}</ul> : <p className="muted">No active suggestions.</p>}</div>
+      <div className="update-stamp"><span className="status-dot"/>Last change {displayTime(c.updated_at)}</div>
+      {expanded && <details className="metadata"><summary>Context & decision details</summary><dl><dt>Context version</dt><dd>{c.version}</dd><dt>Decision</dt><dd>{c.decision.reason_code}</dd><dt>Personalization</dt><dd>{c.consent.personalization ? 'On' : 'Off'}</dd></dl></details>}
+    </>}
+    <p className="scope-note">Demo preview, not bank staff access.</p>
+  </Card>
 }
 
-function Preparation({ context }: { context: Context }) {
-  return (
-    <section aria-labelledby="steps-title">
-      <div className="eyebrow">One step at a time</div>
-      <h2 id="steps-title" className="mt-2 text-2xl font-semibold">
-        Your preparation plan
-      </h2>
-      {context.decision.next_steps.length ? (
-        <ol className="mt-5 space-y-5">
-          {context.decision.next_steps.map((step, i) => (
-            <li key={step.id} className="border-t border-slate-100 pt-5">
-              <div className="mb-2 flex items-start gap-3">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-teal-50 text-sm font-semibold text-teal-800">
-                  {i + 1}
-                </span>
-                <h3 className="font-semibold leading-relaxed">{step.title}</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-slate-500">
-                {step.description}
-              </p>
-              <p className="mt-3 flex items-center gap-2 text-xs font-medium text-teal-800">
-                <CalendarDays size={14} />
-                By {formatDate(step.due_on)}
-              </p>
-              <details className="mt-3 text-xs text-slate-500">
-                <summary className="cursor-pointer">Why this step?</summary>
-                <ul className="mt-2 space-y-1">
-                  {context.evidence
-                    .filter((e) => step.evidence_ids.includes(e.id))
-                    .map((e) => (
-                      <li key={e.id}>{e.summary}</li>
-                    ))}
-                </ul>
-              </details>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <div className="mt-5 rounded-xl bg-slate-50 p-5">
-          <p className="font-medium">
-            {context.situation.status === "cancelled"
-              ? "Outdated suggestions withdrawn"
-              : context.decision.action === "ask"
-                ? "Your plan starts with your say"
-                : "No suggestions right now"}
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-500">
-            {context.decision.action === "ask"
-              ? "Confirm your move date to see relevant preparation steps."
-              : context.decision.message}
-          </p>
-        </div>
-      )}
-    </section>
-  );
-}
-
+const checklist = [
+  { title: 'List the organisations to notify', detail: 'Consider your bank, employer, municipality, utilities, internet provider and subscriptions.' },
+  { title: 'Prepare your address details', detail: 'Have your new address, moving date and relevant customer references ready. Keep these details outside this prototype.' },
+  { title: 'Review the remaining updates', detail: 'Check each organisation’s official process and note what still needs to be done.' },
+]
 const scopes: { key: keyof Consent; title: string; description: string }[] = [
-  {
-    key: "personalization",
-    title: "Personalization",
-    description: "Use permitted context to suggest relevant next steps.",
-  },
-  {
-    key: "synthetic_signals",
-    title: "Synthetic signals",
-    description: "Include the example signals in this demo.",
-  },
-  {
-    key: "advisor_preview",
-    title: "Advisor demo preview",
-    description: "Show this session in the read-only preview.",
-  },
-];
+  { key: 'personalization', title: 'Personalization', description: 'Use permitted context for relevant preparation steps.' },
+  { key: 'synthetic_signals', title: 'Synthetic signals', description: 'Include the example goal and home-store signals.' },
+  { key: 'advisor_preview', title: 'Advisor preview', description: 'Show this session in the read-only demo preview.' },
+]
 
 export default function App() {
-  const m = useMoment();
-  const c = m.context;
-  const [view, setView] = useState<"customer" | "advisor">("customer");
-  const [moveDate, setMoveDate] = useState("");
-  const [cancelReview, setCancelReview] = useState(false);
-  const [resetReview, setResetReview] = useState(false);
-  const [dateError, setDateError] = useState("");
-  const disabled = Boolean(m.busy) || !m.fresh;
-  const today = new Date().toISOString().slice(0, 10);
-  const maxDate = new Date(`${today}T00:00:00Z`);
-  maxDate.setUTCDate(maxDate.getUTCDate() + 730);
+  const m = useMoment()
+  const c = m.context
+  const [view, setView] = useState<'customer' | 'advisor'>('customer')
+  const [panel, setPanel] = useState<Panel>(null)
+  const [moveDate, setMoveDate] = useState('')
+  const [draft, setDraft] = useState<{ key: string; ticks: number[] }>({ key: '', ticks: [] })
+  const key = c ? draftKey(c) : ''
+  const ticks = draft.key === key ? draft.ticks : []
+  const disabled = Boolean(m.busy) || !m.fresh
+  const today = new Date().toISOString().slice(0, 10)
+  const maxDate = new Date(`${today}T00:00:00Z`); maxDate.setUTCDate(maxDate.getUTCDate() + 730)
 
   useEffect(() => {
-    setMoveDate(c?.situation.move_date || "");
-    setCancelReview(false);
-    setResetReview(false);
-    setDateError("");
-  }, [c?.session.id, c?.version, c?.situation.move_date]);
+    setPanel(null); setDraft({ key, ticks: [] }); setMoveDate(c?.situation.move_date || '')
+  }, [key])
+  useEffect(() => { if (!m.fresh) { setPanel(null); setDraft({ key: '', ticks: [] }) } }, [m.fresh])
 
-  return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5 md:px-10">
-          <a
-            href="/"
-            aria-label="KBC Moment home"
-            className="flex items-center gap-3 text-inherit no-underline"
-          >
-            <span className="rounded-lg bg-teal-800 px-3 py-2 text-xl font-bold text-white">
-              KBC
-            </span>
-            <span className="text-xl font-semibold tracking-tight">
-              Moment<span className="text-teal-600">.</span>
-            </span>
-          </a>
-          <span className="flex items-center gap-2 text-sm text-slate-500">
-            <ShieldCheck size={18} />
-            <span className="hidden sm:inline">Your life. Your say.</span>
-          </span>
-        </div>
-      </header>
-      <div
-        className={
-          fixtureMode
-            ? "mode-banner bg-amber-50 text-amber-950"
-            : "mode-banner bg-teal-50 text-teal-950"
-        }
-      >
-        <strong>
-          {fixtureMode ? "Development fixture mode" : "Live API mode"}
-        </strong>
-        <span>
-          {" "}
-          · Synthetic demo only · No banking connection or transactions
-        </span>
-      </div>
-      <main className="mx-auto max-w-7xl px-6 py-8 md:px-10 md:py-10">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <Home size={16} />
-            Your space
-            <ChevronRight size={14} />
-            <span className="text-teal-800">Life moments</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {c && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setView(view === "customer" ? "advisor" : "customer")
-                }
-              >
-                {view === "customer"
-                  ? "Advisor demo preview"
-                  : "Back to customer view"}
-                <ArrowRight size={16} />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              disabled={Boolean(m.busy)}
-              onClick={() => void m.refresh()}
-            >
-              <RefreshCw size={15} />
-              Refresh
-            </Button>
-          </div>
-        </div>
+  const open = (value: Panel) => { setMoveDate(c?.situation.move_date || ''); setPanel(value) }
+  const activeStep = c?.decision.next_steps.find(step => step.id === panel)
+  const panelAllowed = c && m.fresh && (panel !== 'moving-admin' && panel !== 'moving-insurance' || activeStep)
+  const titles: Record<Exclude<Panel, null>, string> = { date: c?.situation.status === 'confirmed' ? 'Change your move date' : 'Plan your move', cancel: 'Cancel your moving moment', privacy: 'Privacy & consent', evidence: 'Why this moment?', history: 'Your changes', reset: 'Start a new demo', 'moving-admin': 'Your address checklist', 'moving-insurance': 'Prepare your home-cover questions' }
 
-        <div aria-live="polite" aria-atomic="true">
-          {m.busy && (
-            <p className="mb-5 text-sm text-teal-800" role="status">
-              {m.busy}…
-            </p>
-          )}
-          {m.notice && (
-            <p
-              role="status"
-              className="mb-5 flex items-center gap-2 text-sm text-teal-800"
-            >
-              <Check size={17} />
-              {m.notice}
-            </p>
-          )}
-        </div>
-        {m.error && (
-          <div
-            role="alert"
-            className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950"
-          >
-            <p className="font-medium">{m.error.message}</p>
-            {m.error.details.length > 0 && (
-              <ul className="mt-2 list-inside list-disc text-sm">
-                {m.error.details.map((detail, i) => (
-                  <li key={i}>
-                    {detail.field}: {detail.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!m.fresh && !m.sessionRequired && (
-              <p className="mt-2 text-sm">
-                Controls are paused until Refresh retrieves the current state.
-                No demo data will be substituted.
-              </p>
-            )}
-          </div>
-        )}
-
-        {!c ? (
-          <Card className="mx-auto max-w-3xl gap-6 p-8 md:p-12">
-            <span className="flex size-14 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
-              <Sparkles size={28} />
-            </span>
-            <div>
-              <div className="eyebrow">A little clarity for what’s next</div>
-              <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-tight">
-                Correct once.
-                <br />
-                Be understood everywhere.
-              </h1>
-              <p className="mt-5 text-lg leading-relaxed text-slate-500">
-                Meet Alex, a synthetic customer who might be planning a move.
-                Explore how a correction changes the next step — and the next
-                conversation.
-              </p>
-            </div>
-            {m.sessionRequired ? (
-              <Button
-                className="w-fit bg-teal-800 text-white hover:bg-teal-900"
-                disabled={Boolean(m.busy)}
-                onClick={() => void m.start()}
-              >
-                Start synthetic demo
-                <ArrowRight size={17} />
-              </Button>
-            ) : (
-              !m.busy && (
-                <Button className="w-fit" onClick={() => void m.refresh()}>
-                  Retry connection
-                </Button>
-              )
-            )}
-            <p className="text-xs leading-relaxed text-slate-500">
-              Starting creates an independent synthetic session for this
-              browser.{" "}
-              {fixtureMode
-                ? "Fixture state survives page refresh while this development server runs."
-                : "Your existing session is recovered automatically on refresh."}
-            </p>
-          </Card>
-        ) : !m.fresh ? (
-          <Card className="p-8">
-            <h1 className="text-2xl font-semibold">
-              Let’s reconnect before continuing
-            </h1>
-            <p className="text-slate-500">
-              Your previous suggestions are hidden until we can verify the
-              current situation.
-            </p>
-          </Card>
-        ) : view === "advisor" ? (
-          <>
-            <section className="mb-8">
-              <div className="eyebrow">Read-only · same session</div>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-                A shared understanding.
-              </h1>
-              <p className="mt-3 text-slate-500">
-                Advisor demo preview — synthetic session, not bank staff access.
-              </p>
-            </section>
-            {!c.consent.advisor_preview ? (
-              <Card className="p-8">
-                <LockKeyhole className="text-teal-700" />
-                <h2 className="text-2xl font-semibold">
-                  Preview consent is off
-                </h2>
-                <p className="text-slate-500">
-                  Return to the customer view to manage consent. No advisor
-                  context is shown.
-                </p>
-              </Card>
-            ) : m.advisorError ? (
-              <Card role="alert" className="p-8">
-                <p>{m.advisorError}</p>
-              </Card>
-            ) : !m.advisor ? (
-              <Card className="p-8" role="status">
-                Refreshing the advisor context…
-              </Card>
-            ) : (
-              <div className="grid items-start gap-6 lg:grid-cols-[1.4fr_1fr]">
-                <Card className="gap-6 p-7">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">
-                      {m.advisor.context.customer.display_name} · Synthetic
-                    </Badge>
-                    <Badge variant="outline">
-                      Context version {m.advisor.context.version}
-                    </Badge>
-                    <Badge variant="outline">Read-only</Badge>
-                  </div>
-                  <h2 className="text-2xl font-semibold">
-                    {statusLabel(m.advisor.context)}
-                  </h2>
-                  <p className="text-lg">
-                    {m.advisor.context.decision.message}
-                  </p>
-                  {m.advisor.context.situation.move_date && (
-                    <p className="text-sm text-slate-500">
-                      Move date:{" "}
-                      {formatDate(m.advisor.context.situation.move_date)}
-                    </p>
-                  )}
-                  <EvidenceList context={m.advisor.context} />
-                  <details className="border-t pt-4 text-sm text-slate-500">
-                    <summary className="cursor-pointer">
-                      Decision details
-                    </summary>
-                    <dl className="mt-3 space-y-2">
-                      <div>
-                        <dt className="font-semibold">Action</dt>
-                        <dd>{m.advisor.context.decision.action}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-semibold">Reason</dt>
-                        <dd>{m.advisor.context.decision.reason_code}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-semibold">Updated</dt>
-                        <dd>
-                          {new Date(
-                            m.advisor.context.updated_at,
-                          ).toLocaleString()}
-                        </dd>
-                      </div>
-                    </dl>
-                  </details>
-                </Card>
-                <Card className="p-7">
-                  <Preparation context={m.advisor.context} />
-                </Card>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <section className="mb-8">
-              <div className="eyebrow">A little clarity for what’s next</div>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
-                Life moves. We’re here with you.
-              </h1>
-              <p className="mt-4 text-lg text-slate-500">
-                Hi {c.customer.display_name}, you decide what fits your life —
-                and what doesn’t.
-              </p>
-            </section>
-            <div className="grid items-start gap-6 lg:grid-cols-[1.45fr_1fr]">
-              <div className="space-y-6">
-                <Card className="gap-0 overflow-hidden p-0">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 bg-teal-50 px-7 py-4">
-                    <span className="flex items-center gap-2 font-semibold text-teal-900">
-                      <Home size={18} />
-                      Your moving moment
-                    </span>
-                    <Badge variant="outline" className="bg-white text-teal-900">
-                      {statusLabel(c)}
-                    </Badge>
-                  </div>
-                  <div className="p-7">
-                    <h2 className="text-2xl font-semibold leading-snug">
-                      {c.decision.message}
-                    </h2>
-                    {c.situation.status === "tentative" && (
-                      <p className="mt-3 leading-relaxed text-slate-500">
-                        The signals could mean a move, or something else
-                        entirely. Only you know your story.
-                      </p>
-                    )}
-                    {c.situation.move_date && (
-                      <p className="mt-3 flex items-center gap-2 text-teal-900">
-                        <CalendarDays size={18} />
-                        Your move date: {formatDate(c.situation.move_date)}
-                      </p>
-                    )}
-                    <form
-                      className="mt-6 border-t border-slate-100 pt-5"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        if (!moveDate) {
-                          setDateError("Choose a move date first.");
-                          return;
-                        }
-                        setDateError("");
-                        void m.confirm(moveDate);
-                      }}
-                    >
-                      <label
-                        htmlFor="move-date"
-                        className="text-sm font-semibold"
-                      >
-                        {c.situation.status === "confirmed"
-                          ? "Change your move date"
-                          : c.situation.status === "cancelled"
-                            ? "Plans changed again? Confirm a new move"
-                            : "When are you planning to move?"}
-                      </label>
-                      <div className="mt-3 flex flex-wrap items-center gap-3">
-                        <Input
-                          id="move-date"
-                          aria-describedby="date-help"
-                          aria-invalid={Boolean(dateError)}
-                          type="date"
-                          required
-                          min={today}
-                          max={maxDate.toISOString().slice(0, 10)}
-                          value={moveDate}
-                          onChange={(event) => {
-                            setMoveDate(event.target.value);
-                            setDateError("");
-                          }}
-                          disabled={disabled}
-                          className="h-11 w-full bg-white sm:w-48"
-                        />
-                        <Button
-                          disabled={disabled}
-                          type="submit"
-                          className="h-11 bg-teal-800 px-5 text-white hover:bg-teal-900"
-                        >
-                          <Check size={17} />
-                          {c.situation.status === "confirmed"
-                            ? "Save new date"
-                            : "Confirm move date"}
-                        </Button>
-                      </div>
-                      <p id="date-help" className="mt-2 text-xs text-slate-500">
-                        Today through the next two years. Saving a date requests
-                        preparation help now.
-                      </p>
-                      {dateError && (
-                        <p role="alert" className="mt-2 text-sm text-red-700">
-                          {dateError}
-                        </p>
-                      )}
-                    </form>
-                    {c.situation.status !== "cancelled" && (
-                      <div className="mt-5">
-                        {cancelReview ? (
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <p className="text-sm">
-                              Cancel this moving moment and withdraw its
-                              suggestions?
-                            </p>
-                            <div className="mt-3 flex flex-wrap gap-3">
-                              <Button
-                                disabled={disabled}
-                                onClick={() => void m.cancel()}
-                              >
-                                Yes, cancel the move
-                              </Button>
-                              <Button
-                                disabled={disabled}
-                                variant="outline"
-                                onClick={() => setCancelReview(false)}
-                              >
-                                Keep this moment
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <Button
-                            disabled={disabled}
-                            variant="ghost"
-                            className="text-slate-600"
-                            onClick={() => setCancelReview(true)}
-                          >
-                            <X size={16} />
-                            {c.situation.status === "tentative"
-                              ? "I’m not moving"
-                              : "Cancel this move"}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </Card>
-                <Card className="p-7">
-                  <EvidenceList context={c} />
-                </Card>
-              </div>
-              <aside className="space-y-6">
-                <Card className="p-7">
-                  <Preparation context={c} />
-                </Card>
-                <Card className="gap-5 bg-[#edf5f2] p-7">
-                  <div>
-                    <LockKeyhole size={22} className="mb-3 text-teal-700" />
-                    <h2 className="text-xl font-semibold">You’re in control</h2>
-                  </div>
-                  <div className="space-y-5">
-                    {scopes.map((scope) => (
-                      <div
-                        key={scope.key}
-                        className="flex items-start justify-between gap-4"
-                      >
-                        <div>
-                          <p
-                            id={`${scope.key}-label`}
-                            className="text-sm font-semibold"
-                          >
-                            {scope.title}
-                          </p>
-                          <p
-                            id={`${scope.key}-help`}
-                            className="mt-1 max-w-64 text-xs leading-relaxed text-slate-600"
-                          >
-                            {scope.description}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={c.consent[scope.key]}
-                          aria-labelledby={`${scope.key}-label`}
-                          aria-describedby={`${scope.key}-help`}
-                          disabled={disabled}
-                          onClick={() =>
-                            void m.consent(scope.key, !c.consent[scope.key])
-                          }
-                          className={`mt-1 flex h-7 w-12 shrink-0 items-center rounded-full border-2 border-transparent p-0.5 transition-colors disabled:cursor-wait disabled:opacity-60 ${c.consent[scope.key] ? "justify-end bg-teal-800" : "justify-start bg-slate-400"}`}
-                        >
-                          <span className="size-5 rounded-full bg-white shadow-sm" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="border-t border-teal-900/10 pt-4 text-xs leading-relaxed text-slate-600">
-                    Turning consent off stops its use; it does not delete the
-                    saved synthetic context. Your explicit corrections remain
-                    yours.
-                  </p>
-                </Card>
-              </aside>
-            </div>
-          </>
-        )}
-        <footer className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5 text-xs text-slate-500">
-          <span>KBC Moment · Tectonic hackathon concept</span>
-          {c && (
-            <div className="flex flex-wrap items-center gap-3">
-              {resetReview ? (
-                <>
-                  <span>Replace this browser’s demo session?</span>
-                  <Button
-                    size="sm"
-                    disabled={Boolean(m.busy)}
-                    onClick={() => void m.start()}
-                  >
-                    Start a new demo
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={Boolean(m.busy)}
-                    onClick={() => setResetReview(false)}
-                  >
-                    Keep session
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={Boolean(m.busy)}
-                  onClick={() => setResetReview(true)}
-                >
-                  Reset synthetic demo
-                </Button>
-              )}
-            </div>
-          )}
-        </footer>
-      </main>
-    </div>
-  );
+  return <div className="banking-workspace">
+    <header className="app-header"><div className="header-inner">
+      <a href="/" className="brand" aria-label="KBC Moment home"><img src="/kbc-logo.svg" alt="KBC"/><span>Moment</span></a>
+      <nav aria-label="Workspace view" className="view-switch"><button aria-pressed={view === 'customer'} onClick={() => { setView('customer'); setPanel(null) }}>Customer</button><button aria-pressed={view === 'advisor'} onClick={() => { setView('advisor'); setPanel(null) }}>Advisor</button></nav>
+      <span className="header-prototype">Hackathon prototype · synthetic data</span><div className="profile"><span className="avatar">A</span><span>{c?.customer.display_name || 'Alex'}</span></div>
+    </div></header>
+    <div className="environment-strip"><div><span className="mobile-prototype">Hackathon prototype · synthetic data</span><span className={fixtureMode ? 'fixture-label' : 'live-label'}>{fixtureMode ? 'Development fixtures' : 'Live API'}<span className="environment-detail"> · No banking transactions</span></span></div></div>
+    <main className="workspace-container">
+      <div className="workspace-toolbar"><p><Home size={14}/>My moments<ChevronRight size={14}/><strong>{view === 'customer' ? 'Moving home' : 'Advisor preview'}</strong></p><Button variant="ghost" size="sm" disabled={Boolean(m.busy)} onClick={() => void m.refresh()}><RefreshCw size={14}/>Refresh</Button></div>
+      {(m.busy || m.notice) && <p className="status-line" role="status" aria-live="polite">{m.busy ? `${m.busy}…` : <><Check size={15}/>{m.notice}</>}</p>}
+      {m.error && <div role="alert" className="error-panel"><strong>{m.error.message}</strong>{m.error.details.map((detail, i) => <p key={i}>{detail.field}: {readableMessage(detail.message)}</p>)}{!m.fresh && !m.sessionRequired && <p>Refresh to verify the current state before continuing.</p>}</div>}
+      {!c ? <section className="move-hero welcome-hero"><div><p className="eyebrow">Welcome to KBC Moment</p><h1>Your move,<br/>organised.</h1><p className="hero-message">A little preparation. A clear next step.<br/>A plan that changes when your life does.</p>{m.sessionRequired ? <Button disabled={Boolean(m.busy)} onClick={() => void m.start()}>Start Alex’s demo<ArrowRight size={17}/></Button> : !m.busy && <Button onClick={() => void m.refresh()}>Retry connection</Button>}<p className="scope-note">Explore a synthetic moving journey. Nothing is sent to a bank.</p></div><div className="hero-art" aria-hidden="true"><Home/><span><MapPin size={24}/></span></div></section> : !m.fresh ? <Card className="workspace-card"><h1>Let’s reconnect before continuing</h1><p className="muted">Previous suggestions are hidden until the current situation is verified.</p></Card> : view === 'advisor' ? <div className="advisor-expanded"><section className="page-intro"><p className="eyebrow">Read-only workspace</p><h1>One shared understanding.</h1><p className="muted">Alex’s current situation, decisions and changes, read from the same session.</p></section><AdvisorSummary moment={m} expanded/></div> : <div className="workspace-grid"><div className="customer-column">
+        <section className="move-hero"><div className="hero-copy"><div className="situation-badge"><span className="status-dot"/>{situationLabel(c)}</div><h1>Your move, organised.</h1><p className="hero-message">{readableMessage(c.decision.message)}</p>
+          {c.situation.move_date && <div className="hero-date"><CalendarDays size={17}/><strong>{displayDate(c.situation.move_date)}</strong><Button variant="ghost" size="sm" disabled={disabled} onClick={() => open('date')}><Pencil size={13}/>Change date</Button></div>}
+          <div className="hero-actions">{c.situation.status !== 'confirmed' && <Button disabled={disabled} onClick={() => open('date')}>{c.situation.status === 'cancelled' ? 'Plan a new move' : 'Plan my move'}<ArrowRight size={16}/></Button>}{c.situation.status !== 'cancelled' && <Button variant="ghost" disabled={disabled} onClick={() => open('cancel')}>{c.situation.status === 'tentative' ? 'I’m not moving' : 'Cancel move'}</Button>}</div>
+        </div><div className="hero-art" aria-hidden="true"><Home/><span><MapPin size={24}/></span></div></section>
+        <section className="preparation-section"><div className="section-title"><h2>Your next steps</h2><span>{c.decision.next_steps.length ? `${c.decision.next_steps.length} preparation tasks` : 'You set the pace'}</span></div>
+          {c.decision.next_steps.length ? <div className="action-grid">{c.decision.next_steps.map(step => <Card key={step.id} className="workspace-card action-card"><span className="icon-tile">{step.id === 'moving-insurance' ? <ShieldCheck/> : <ClipboardList/>}</span><h3>{step.title}</h3><p className="muted">{step.id === 'moving-admin' ? 'Get your organisations and address details ready in one simple checklist.' : step.id === 'moving-insurance' ? 'Bring the right questions to your next conversation.' : readableMessage(step.description)}</p><p className="task-date"><CalendarDays size={14}/>For {displayDate(step.due_on)}</p>{['moving-admin', 'moving-insurance'].includes(step.id) ? <Button variant="outline" disabled={disabled} onClick={() => open(step.id as Panel)}>{step.id === 'moving-admin' ? 'Open checklist' : 'Prepare questions'}<ArrowRight size={15}/></Button> : <p className="scope-note">{readableMessage(step.description)}</p>}</Card>)}</div> : <Card className="workspace-card empty-plan"><span className="icon-tile"><ClipboardList/></span><div><h3>{c.situation.status === 'cancelled' ? 'Your old suggestions are withdrawn' : c.decision.action === 'ask' ? 'A useful plan starts with you' : 'Preparation help is paused'}</h3><p className="muted">{c.decision.action === 'ask' ? 'Select Plan my move to confirm your date. We’ll then show your preparation steps here.' : readableMessage(c.decision.message)}</p></div></Card>}
+        </section>
+        <div className="workspace-links"><button onClick={() => open('evidence')}><ClipboardList size={16}/>Why this moment?<ChevronRight size={16}/></button><button onClick={() => open('history')}><RefreshCw size={16}/>Your changes<ChevronRight size={16}/></button><button onClick={() => open('privacy')}><LockKeyhole size={16}/>Privacy & consent<ChevronRight size={16}/></button></div>
+        {!c.consent.personalization && <p className="privacy-status"><LockKeyhole size={15}/>Personalization is off. Your explicit choices are kept.</p>}
+      </div><aside className="advisor-column"><AdvisorSummary moment={m}/><div className="reassurance"><ShieldCheck size={21}/><p><strong>Your plans. Your say.</strong><br/>A correction changes both views. You can cancel or change consent at any time.</p></div></aside></div>}
+      <footer className="workspace-footer"><span>KBC Moment · Hackathon concept</span>{c && <Button variant="ghost" size="sm" disabled={disabled} onClick={() => open('reset')}>Reset demo</Button>}</footer>
+    </main>
+    {panel && panelAllowed && <Drawer title={titles[panel]} onClose={() => setPanel(null)}>
+      {m.error && <p className="error-panel" role="alert">{m.error.message}</p>}{m.busy && <p role="status" className="status-line">{m.busy}…</p>}
+      {panel === 'date' && <form onSubmit={event => { event.preventDefault(); void m.confirm(moveDate) }}><span className="icon-tile"><CalendarDays/></span><h3 className="drawer-intro">A date helps us prepare the right next steps.</h3><label className="field-label" htmlFor="move-date">{c.situation.status === 'confirmed' ? 'New move date' : 'Planned move date'}</label><Input id="move-date" type="date" autoFocus required min={today} max={maxDate.toISOString().slice(0, 10)} value={moveDate} onChange={event => setMoveDate(event.target.value)} disabled={disabled}/><p className="scope-note">Choose today through the next 730 days. Saving requests preparation help now and clears an existing reminder date.</p><Button className="drawer-submit" type="submit" disabled={disabled}>{c.situation.status === 'confirmed' ? 'Save move date' : 'Confirm & build my plan'}<ArrowRight size={16}/></Button></form>}
+      {panel === 'cancel' && <><p>Cancelling withdraws moving suggestions from your workspace and the advisor preview.</p><p className="scope-note">You can confirm a new move later if your plans change.</p><Button disabled={disabled} className="drawer-submit" onClick={() => void m.cancel()}><X size={16}/>Confirm cancellation</Button></>}
+      {panel === 'reset' && <><p>Create a fresh synthetic session for this browser? Your current local preparation draft will be cleared.</p><Button disabled={disabled} className="drawer-submit" onClick={() => void m.start()}>Start a new demo</Button></>}
+      {panel === 'privacy' && <><p className="muted">Choose how this synthetic context is used. Turning a scope off stops its use; it does not delete the stored demo context.</p><div className="consent-list">{scopes.map(scope => <label key={scope.key} className="consent-row"><span><strong>{scope.title}</strong><small>{scope.description}</small></span><input type="checkbox" role="switch" checked={c.consent[scope.key]} disabled={disabled} onChange={event => void m.consent(scope.key, event.target.checked)}/></label>)}</div></>}
+      {panel === 'evidence' && <><p className="muted">Only evidence currently permitted by your consent is shown.</p>{c.evidence.length ? <ul className="evidence-list">{c.evidence.map(item => <li key={item.id}><span className="eyebrow">{item.kind === 'customer_correction' ? 'Your correction' : 'Synthetic signal'}</span><p>{readableMessage(item.summary)}</p><small>{displayTime(item.occurred_at)}</small></li>)}</ul> : <p className="empty-compact">No permitted evidence is available.</p>}<details className="metadata"><summary>Technical context</summary><p>Context version {c.version} · {c.decision.reason_code}</p></details></>}
+      {panel === 'history' && <>{c.history.length ? <ol className="evidence-list">{[...c.history].reverse().map(item => <li key={item.version}><strong>{changeLabel(item.action)}</strong><p className="muted">{displayTime(item.occurred_at)}</p></li>)}</ol> : <p>No changes yet. Your decisions will appear here.</p>}</>}
+      {panel === 'moving-admin' && activeStep && <><p className="drawer-kicker">Preparing for {displayDate(c.situation.move_date!)}</p><p className="draft-notice">Unsaved draft progress · kept only while this page and context stay unchanged.</p><div className="checklist">{checklist.map((item, i) => <label key={item.title}><input type="checkbox" checked={ticks.includes(i)} onChange={event => setDraft({ key, ticks: event.target.checked ? [...ticks, i] : ticks.filter(index => index !== i) })}/><span><strong>{item.title}</strong><small>{item.detail}</small></span></label>)}</div><p className="scope-note">This is preparation only. No address has been updated at KBC or any other organisation.</p></>}
+      {panel === 'moving-insurance' && activeStep && <><p className="drawer-kicker">Questions for your move on {displayDate(c.situation.move_date!)}</p><ol className="question-list"><li>What should I check about my current home cover before {displayDate(c.situation.move_date!)}?</li><li>What details will you need about the new home and the moving date?</li><li>If I have access to both homes for a while, what should I ask about that overlap?</li><li>What should I check about belongings during the move?</li><li>Which documents and next steps should I prepare before any change?</li></ol><p className="scope-note">A conversation guide only. It does not confirm cover, eligibility or prices, and does not buy or change a policy.</p></>}
+    </Drawer>}
+  </div>
 }
