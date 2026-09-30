@@ -1,0 +1,14 @@
+.git
+.venv
+**/__pycache__
+.pytest_cache
+.env
+.env.*
+.aws
+.codex
+.agents
+.railway
+frontend/node_modules
+frontend/dist
+docs
+tests

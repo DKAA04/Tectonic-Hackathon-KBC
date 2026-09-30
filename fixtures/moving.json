@@ -1,0 +1,19 @@
+{
+  "fixture_version": 1,
+  "synthetic": true,
+  "customer": {"display_name": "Alex", "synthetic": true},
+  "signals": [
+    {
+      "id": "signal-goal",
+      "kind": "synthetic_signal",
+      "summary": "Alex saved a moving preparation goal in this demo.",
+      "days_ago": 2
+    },
+    {
+      "id": "signal-home-store",
+      "kind": "synthetic_signal",
+      "summary": "A synthetic home-store visit could relate to a move or ordinary shopping.",
+      "days_ago": 1
+    }
+  ]
+}

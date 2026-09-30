@@ -1,7 +1,7 @@
 # Tectonic × KBC — execution plan
 
-**30 September 2026 · Leuven · Europe/Brussels (CEST)**  
-**Operator:** Angel, working alone with Parrot + Windows + iPad.  
+**30 September 2026 · Leuven · Europe/Brussels (CEST)**
+**Operator:** Angel, working alone with Parrot + Windows + iPad.
 **Plan established around 19:00. Build cutoff: 22:30. Target final submission: 22:10.**
 
 This is a proposed product and execution plan grounded in the supplied guide, tonight’s schedule, the current repository, and your earlier preparation. Product choices and targets below are recommendations, not organizer requirements or measured results. Organizer instructions received tonight take priority.
