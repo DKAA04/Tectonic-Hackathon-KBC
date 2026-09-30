@@ -35,6 +35,37 @@ pg_virtualenv bash -c '.venv/bin/python -m app.db init && .venv/bin/python -m uv
 Swagger: `http://127.0.0.1:8000/api/docs`.
 An API-only deployment returns a small status object at `/` until the frontend arrives.
 
+## Essential demo and checks
+
+1. Start demo (`POST /api/demo/session` with `{}`): Alex's ambiguous synthetic
+   signals produce an evidence-linked question.
+2. Confirm a move date with the returned version and `X-CSRF-Token`: two useful
+   preparation steps appear. No bank action is executed.
+3. Open the advisor preview with the same browser session: its context matches.
+4. Cancel: suggestions disappear from both channels. Refresh preserves the change.
+5. Revoke personalization: evidence is filtered and decisions suppressed. Turning
+   consent on again preserves the customer's cancellation.
+6. Use an incognito browser for a new isolated fixture. Creating a demo again
+   resets only the caller's browser; no shared global customer is overwritten.
+
+```bash
+pg_virtualenv .venv/bin/pytest -q
+pg_virtualenv .venv/bin/python tests/smoke_http.py
+.venv/bin/python -m pip check
+docker build -t kbc-moment:local .
+# Optional Linux/container startup verification against temporary PostgreSQL:
+pg_virtualenv .venv/bin/python tests/smoke_http.py --container kbc-moment:local
+```
+
+The tests use real temporary PostgreSQL. For another environment set an isolated
+`TEST_DATABASE_URL`; tests do not use the application DATABASE_URL. The HTTP smoke
+starts a real Uvicorn process and exercises cookies, CSRF and the complete journey.
+Container smoke uses local host networking and development cookies for plain HTTP;
+deployment uses production Secure cookies behind Railway HTTPS.
+Frontend calls use relative URLs; recover CSRF with `GET /api/context` on reload.
+Consent starts enabled for this entirely synthetic fixture. Revocation filters
+inference and output; it retains stored context and is not a deletion request.
+
 ## Railway configuration
 
 The root Dockerfile installs pinned Python requirements, runs `npm ci` and

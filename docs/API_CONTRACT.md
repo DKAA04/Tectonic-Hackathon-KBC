@@ -144,7 +144,7 @@ and an explicitly supplied `remind_on`; null clears it. `cancel` rejects dates.
 ```
 
 Move dates must be today through 730 days ahead (server UTC date). Reminders must
-be today through the move date. Changing a date past an existing reminder requires
+be today through the move date. Moving the date before an existing reminder requires
 supplying a valid replacement reminder in the same request. No free text is accepted.
 Corrections are accepted with personalization off; turning it on later never undoes
 the customer's most recent explicit intent. Original signals cannot override a

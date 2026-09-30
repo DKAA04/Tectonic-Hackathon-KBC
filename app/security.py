@@ -1,4 +1,3 @@
-from fastapi import Request
 from starlette.datastructures import Headers
 
 from app.errors import APIError, error_response

@@ -5,20 +5,27 @@ import logging
 import secrets
 from uuid import uuid4
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.security import APIKeyCookie
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 
 from app.config import Settings
+from app.corrections import correct, change_consent
 from app.db import Database, DemoSession
 from app.errors import APIError, error_response
 from app.policy import project
-from app.schemas import AdvisorPreview, Bootstrap, Context
+from app.schemas import AdvisorPreview, Bootstrap, Context, Correction, ConsentChange, ErrorEnvelope, Health
 from app.security import APIBoundary, COOKIE_NAME
 from app.seed import seed_evidence
+
+
+session_cookie = APIKeyCookie(name=COOKIE_NAME, auto_error=False, scheme_name="DemoSessionCookie")
+CSRF_DOCUMENTATION = {"parameters": [{"name": "X-CSRF-Token", "in": "header", "required": True,
+                                     "schema": {"type": "string"}, "description": "Recover from session.csrf_token in Context."}]}
 
 
 def utcnow():
@@ -53,6 +60,15 @@ def context_for(row: DemoSession) -> Context:
     )
 
 
+def authorize_write(row: DemoSession, request: Request, expected_version: int):
+    token = request.headers.get("x-csrf-token", "")
+    if len(token) > 128 or not secrets.compare_digest(token.encode(), row.csrf_token.encode()):
+        raise APIError(403, "CSRF_INVALID", "Missing or incorrect X-CSRF-Token.")
+    if expected_version != row.version:
+        raise APIError(409, "VERSION_CONFLICT", "Context changed. Fetch the latest context and retry.",
+                       [{"field": "expected_version", "message": f"Current version is {row.version}."}])
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings)
@@ -63,7 +79,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         database.close()
 
     app = FastAPI(title="KBC Moment — synthetic demo", version="1.0.0",
-                  docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json", lifespan=lifespan)
+                  docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json", lifespan=lifespan,
+                  responses={status: {"model": ErrorEnvelope} for status in (401, 403, 404, 405, 409, 413, 415, 422, 500, 503)})
     app.state.database = database
     app.state.settings = settings
     app.add_middleware(APIBoundary, allowed_origins=settings.allowed_origins)
@@ -93,7 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logging.getLogger("moment").error("Unexpected request error: %s", type(error).__name__)
         return error_response(APIError(500, "INTERNAL_ERROR", "Unexpected error."))
 
-    @app.get("/api/health")
+    @app.get("/api/health", response_model=Health, responses={503: {"model": Health}})
     def health():
         ready = database.ready()
         return JSONResponse(status_code=200 if ready else 503, content={
@@ -120,13 +137,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             secure=settings.secure_cookie, samesite="lax", path="/")
         return context_for(row)
 
-    @app.get("/api/context", response_model=Context)
+    @app.get("/api/context", response_model=Context, dependencies=[Depends(session_cookie)])
     def get_context(request: Request):
         database.require()
         with database.sessions() as db:
             return context_for(load_session(db, request))
 
-    @app.get("/api/advisor-preview", response_model=AdvisorPreview)
+    @app.post("/api/context/correction", response_model=Context, dependencies=[Depends(session_cookie)], openapi_extra=CSRF_DOCUMENTATION)
+    def correction(body: Correction, request: Request):
+        database.require()
+        with database.sessions.begin() as db:
+            row = load_session(db, request, lock=True)
+            authorize_write(row, request, body.expected_version)
+            correct(row, body, utcnow())
+            result = context_for(row)
+        return result
+
+    @app.post("/api/consent", response_model=Context, dependencies=[Depends(session_cookie)], openapi_extra=CSRF_DOCUMENTATION)
+    def consent(body: ConsentChange, request: Request):
+        database.require()
+        with database.sessions.begin() as db:
+            row = load_session(db, request, lock=True)
+            authorize_write(row, request, body.expected_version)
+            change_consent(row, body, utcnow())
+            result = context_for(row)
+        return result
+
+    @app.get("/api/advisor-preview", response_model=AdvisorPreview, dependencies=[Depends(session_cookie)])
     def advisor(request: Request):
         database.require()
         with database.sessions() as db:

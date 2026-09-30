@@ -52,7 +52,7 @@ class Database:
             return False
         try:
             with self.engine.connect() as connection:
-                connection.execute(select(DemoSession.id).limit(1))
+                connection.execute(select(DemoSession).limit(1))
             return True
         except Exception:
             return False
