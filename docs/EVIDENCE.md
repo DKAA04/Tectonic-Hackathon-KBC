@@ -66,6 +66,9 @@ corrected to commit its search_path setting so connection rollback could not und
 
 - Railway CLI 5.63.1: signed-in status command reached the service but reported
   **No linked project found**. Project/service target and spending approval requested.
+- `railway list --json` returned `[]` (exit 0) for the current account: no accessible
+  project target was found. Creating a new project/web/PostgreSQL service requires
+  the operator's target and authorization for service costs; nothing was provisioned.
 - No public deployment or Railway database connection has been verified.
 - Remote Windows frontend `e4908cf` is a fixture shell, with its production
   transport intentionally unconfigured. Build/serving checks above passed;
