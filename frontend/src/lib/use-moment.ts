@@ -199,6 +199,13 @@ export function useMoment() {
           c.session.csrf_token,
         ),
       ),
+    remind: (remind_on: string | null) =>
+      update("Saving your help timing", (c) =>
+        api.correct(
+          { expected_version: c.version, action: "set_reminder", remind_on },
+          c.session.csrf_token,
+        ),
+      ),
     consent: (scope: keyof Consent, enabled: boolean) =>
       update("Saving your consent choice", (c) =>
         api.setConsent(
