@@ -2,11 +2,15 @@
 
 ## Workspace redesign
 
-The compact blue workspace takes visual cues from the [official KBC Mobile page](https://www.kbc.be/retail/en/products/payments/self-banking/on-your-smartphone/mobile-banking.html). The public KBC SVG in `public/kbc-logo.svg` is downloaded unchanged from the logo link on that page: https://wcmassets.kbc.be/content/dam/kdl-assets/logos/k/logos-kbc.svg.cdn.res/last-modified/1733244069305/logos-kbc.svg. The cyan/navy/background tokens are prototype choices, not official brand specifications. Persistent labeling identifies this as a hackathon prototype with synthetic data.
+The compact blue workspace takes visual cues from the [official KBC Mobile page](https://www.kbc.be/retail/en/products/payments/self-banking/on-your-smartphone/mobile-banking.html). The public KBC SVG in `public/kbc-logo.svg` is downloaded from the logo link on that page (artwork unchanged, whitespace cleaned): https://wcmassets.kbc.be/content/dam/kdl-assets/logos/k/logos-kbc.svg.cdn.res/last-modified/1733244069305/logos-kbc.svg. The cyan/navy/background tokens are prototype choices, not official brand specifications. Persistent labeling identifies this as a hackathon prototype with synthetic data.
 
 Choose **Plan my move** to confirm a date in a drawer; after confirmation, **Change date** is a small editable detail. Returned address and home-cover steps open an unsaved draft checklist and a dated question guide. Checklist ticks exist only in React state, and are invalidated on context/version, consent, date or decision changes. No address or insurance policy is changed. Evidence, history and consent are accessible from the links below the workspace. The advisor column uses its separately fetched, current context rather than duplicating the customer screen.
 
 Responsive CSS targets a two-column desktop workspace and a stacked mobile layout. Browser automation was unavailable during the redesign; visual checks at 1440×900 and 390px remain pending at http://127.0.0.1:5173.
+
+After confirmation, **Help at the right time → Manage** sets `set_reminder` with the current version and CSRF token. Dates are bounded by UTC today and the move date. **Help me now** sends `remind_on: null`; the workspace shows the actual returned suppression/resume state. This does not schedule external notifications. **Save briefing** downloads a local plain-text snapshot of the currently permitted situation, move date and preparation steps. It never exports session IDs, CSRF, credentials or evidence, and does not transmit anything to an advisor. Previously downloaded files are snapshots and cannot be withdrawn later.
+
+The original six API tests remain, with two presentation tests added for export allowlisting, human-readable dates and draft invalidation. No dependencies or API endpoints were added for this redesign.
 
 Windows owns `frontend/` on `feature/frontend`. Parrot owns backend, shared contracts, integration and deployment. This app follows `docs/API_CONTRACT.md` v1.
 
