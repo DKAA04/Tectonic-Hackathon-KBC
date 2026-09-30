@@ -1,26 +1,95 @@
-// UI view model only. Wire transport once docs/API_CONTRACT.md is agreed.
-export interface MomentContext {
-  customer: string
-  version: string
-  situation: string
-  evidence: { title: string; detail: string }[]
+import type {
+  AdvisorPreview,
+  ConsentChange,
+  Context,
+  Correction,
+  ErrorDetail,
+} from "./types.ts";
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  details: ErrorDetail[];
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details: ErrorDetail[] = [],
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
 }
 
-export const fixtureMode = import.meta.env.DEV && import.meta.env.MODE === 'fixture'
-
-export const api = {
-  async getContext(): Promise<MomentContext | null> {
-    if (!fixtureMode) {
-      throw new Error('Live connection is not configured. The shared API contract is required before connecting this screen.')
+// Both adapters use this transport. Cookies stay in the browser; CSRF stays in memory.
+export function createApi(fetcher: typeof fetch = fetch) {
+  async function request<T>(
+    path: string,
+    body?: object,
+    csrf?: string,
+  ): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetcher(`/api${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          Accept: "application/json",
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch {
+      throw new ApiError(
+        0,
+        "NETWORK_ERROR",
+        "The connection was interrupted. Refresh the current state before trying again; your last change may have reached the server.",
+      );
     }
-    return {
-      customer: 'Alex',
-      version: 'fixture-1',
-      situation: 'You might be planning a move',
-      evidence: [
-        { title: 'A home-related payment', detail: 'An example payment to a moving company. It could also be a one-off expense.' },
-        { title: 'A change in your routine', detail: 'Example activity in a new neighbourhood. This does not tell us that you are moving.' },
-      ],
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new ApiError(
+        response.status,
+        "INVALID_RESPONSE",
+        "The service returned an unreadable response. Refresh to check your current state.",
+      );
     }
-  },
+    if (!response.ok) {
+      const error = data?.error;
+      throw new ApiError(
+        response.status,
+        error?.code || "SERVICE_ERROR",
+        error?.message || "The service could not complete this request.",
+        Array.isArray(error?.details) ? error.details : [],
+      );
+    }
+    if (data?.api_version !== "1")
+      throw new ApiError(
+        response.status,
+        "API_VERSION_MISMATCH",
+        "This service uses an unsupported API version.",
+      );
+    return data as T;
+  }
+  return {
+    getContext: () => request<Context>("/context"),
+    startSession: () => request<Context>("/demo/session", {}),
+    correct: (body: Correction, csrf: string) =>
+      request<Context>("/context/correction", body, csrf),
+    setConsent: (body: ConsentChange, csrf: string) =>
+      request<Context>("/consent", body, csrf),
+    getAdvisor: () => request<AdvisorPreview>("/advisor-preview"),
+  };
 }
+export const api = createApi();
+export const fixtureMode = Boolean(
+  import.meta.env?.DEV && import.meta.env.MODE === "fixture",
+);
