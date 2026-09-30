@@ -1,11 +1,18 @@
 # KBC Moment
 
-“Correct once. Be understood everywhere.” A synthetic moving-life-event demo
+"Correct once. Be understood everywhere." A synthetic moving-life-event demo
 using FastAPI, PostgreSQL and a shared customer/advisor context. The policy is
 deterministic rules, not a live AI model. No real bank data or transactions.
 
+Public demo: [Open KBC Moment](https://tectonic-hackathon-kbc-production.up.railway.app).
+The HTTPS journey and production assets are verified; browser/visual checks are
+tracked separately in [docs/EVIDENCE.md](docs/EVIDENCE.md).
+
 The API is fixed in [docs/API_CONTRACT.md](docs/API_CONTRACT.md).
-Windows owns the React frontend; the web service serves `frontend/dist` when built.
+The completed Windows workspace through `7e1e5f9` is integrated into `main`.
+The Vite environment filter fix `0af82d0` is also integrated; its configuration
+loads only `API_PROXY_` variables. Database secrets are backend-only.
+Railway builds and serves `frontend/dist`; production always uses relative `/api`.
 The advisor endpoint is a read-only preview in the customer's demo session,
 not production bank staff authentication or entitlements.
 
@@ -21,8 +28,8 @@ python3 -m venv .venv
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Schema initialization creates the isolated `moment_demo_sessions` table. It never
-resets an existing session or seeds a shared global customer. Each
+Schema initialization creates and protects the isolated `moment_demo_sessions`
+table. It never resets an existing session or seeds a shared global customer. Each
 `POST /api/demo/session` with `{}` creates a new synthetic fixture and cookie.
 Without a configured/working database, `/api/health` returns 503.
 
@@ -74,11 +81,41 @@ Python runtime. The frontend lockfile is required when that package exists.
 Startup creates the schema and binds `0.0.0.0:$PORT`; health probes query the real
 session table. [Railway configuration reference](https://docs.railway.com/config-as-code/reference).
 
-Use one web service and one PostgreSQL service. Set web `DATABASE_URL` using the
-database service's Railway reference, and `APP_ENV=production`. Set `APP_ORIGIN`
-to the public HTTPS origin if the Railway public domain variable is unavailable.
-Never put DATABASE_URL in a `VITE_` variable. Local `.env` values are not committed.
+Use the existing Railway project `perpetual-dream`, web service
+`Tectonic-Hackathon-KBC`, and the operator's existing Supabase PostgreSQL project.
+No Railway database or paid add-on is required. Set `DATABASE_URL` privately on
+the web service, with `sslmode=require`, and keep `APP_ENV=production`.
+For IPv4 use the exact Session pooler hostname/username from Supabase Dashboard
+→ Connect → Session pooler, port 5432. The direct endpoint requires IPv6.
+The deployed app uses the operator-supplied Session pooler over SSL.
+SQLAlchemy uses the database connection, not the Supabase publishable key.
+Set `APP_ORIGIN` to the actual public HTTPS origin. Never put database credentials
+in a `VITE_` variable, source, screenshots or documentation.
 
-No Railway deployment or security audit is claimed until recorded in
-`docs/EVIDENCE.md`. Account authorization, service costs and final competition
-submission remain with the operator.
+## Session table protection
+
+`python -m app.db init` creates the table and applies
+[app/protect_sessions.sql](app/protect_sessions.sql) in one transaction. It
+enables RLS, adds a restrictive deny policy, and revokes table and column grants
+from PUBLIC and existing `anon`, `authenticated` and `service_role` roles.
+Only `public.moment_demo_sessions` and its own policy are changed; no default
+privileges, unrelated tables or policies are modified. Existing rows survive.
+The private FastAPI connection uses the table owner, `postgres` on Supabase,
+and keeps SQL access. Client-role Data API access is deliberately unavailable.
+These controls follow the [Supabase API security guidance](https://supabase.com/docs/guides/api/securing-your-api).
+
+With the private `DATABASE_URL` supplied to the backend environment:
+
+```bash
+.venv/bin/python -m app.db init
+.venv/bin/python -m app.db verify-access
+.venv/bin/python tests/smoke_https.py https://YOUR-RAILWAY-DOMAIN
+```
+
+`verify-access` prints only access-control metadata, never records or credentials.
+The HTTPS smoke creates isolated synthetic sessions and verifies corrections,
+reminders, consent, persistence, channel agreement and built production assets.
+It does not establish visual/browser interaction checks or production capacity.
+
+Verified deployment details and unresolved browser/security-audit checks are in
+`docs/EVIDENCE.md`. Final competition submission remains with the operator.

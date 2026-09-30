@@ -44,8 +44,12 @@ Production build must use the committed frontend lockfile (`npm ci && npm run bu
 The root Dockerfile builds `frontend/dist`; FastAPI serves assets and navigation
 fallback while preserving `/api` JSON errors, health, OpenAPI and Swagger.
 
-Observed remote frontend at `e4908cf`: buildable fixture shell with production
-transport intentionally unconfigured. This is not an integrated live demo yet.
-Its lockfile/install and production build passed in the root Dockerfile, in a
-temporary combined checkout; built HTML, nested navigation and JS assets were served.
-Parrot has not edited any `frontend/` source or its lockfile.
+Current integration: Windows commits `2e634b6` and `7e1e5f9` are merged into
+`main` at `b7e79ab`. This includes the live API transport, redesigned workspace,
+reminder controls and local preparation briefing. `npm ci`, all eight frontend
+tests and the production build passed on Parrot. The real PostgreSQL/Uvicorn
+smoke served built HTML, navigation and JS while exercising the persisted journey.
+The environment filter fix `0af82d0` is included in the GitHub merge `499da12`,
+which passed the complete production HTTPS API/asset checks using Supabase.
+Parrot has not edited any `frontend/` source or its lockfile. Actual browser
+interaction/visual verification remains with Windows; see `EVIDENCE.md`.
